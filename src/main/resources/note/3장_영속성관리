@@ -1,0 +1,54 @@
+영속성 컨텍스트 지원: 1차 캐시, 동일성 보장, 트랜잭션을 지원하는 쓰기 지연, 변경 감지(dirty check), 지연 로딩(Lazy loading)
+
+쓰기 지연: 엔티티 매니저는 트랜잭션을 커밋하기 직전까지 데이터베이스에 엔티티를 저장하지 않고,
+    내부 쿼리 저장소에 SQL을 차곡차곡 모아두다가 트랜젝션을 커밋할 때 모아둔 쿼리를 데이터 베이스에 보냄. 이것임
+
+플러시: 컨텍스트의 변경 내용을 데이터베이스에 동기화 하는것.
+    1. 변경 감지가 동작해서 영속성 컨텍스트에 있는 모든 엔티티를 스냅샷과 비교해서 수정된 엔티티를 찾는다.
+        수정된 엔티티가 있다면 수정 쿼리를 만들어 쓰기 지연 sql 저장소에 저장한다.
+    2.쓰기지연 sql 저장소의 QUERY를 데이터베이스에 전송한다.
+기본적으로 transaction commit(); 하면 flush()를 먼저 자동 수행해 준다.(flush->commit)
+ * 플러시 모드옵션 : 엔티티 매니저에 플러시 모드 직접 지정 가능.
+    : FlushModeType.AUTO: 커밋이나 쿼리를 실행 할 때 플러시(default)
+    : FlushModeType.COMMIT: 커밋할 때만 플러시
+    ```java
+    em.setFlushMode (FlushModeType.COMMIT) //플러시 모드 직접 설정
+
+!
+
+
+- 변경감지 (dirty check)
+    entity.setName("newName");
+    // update(entity); <-- 이런 코드가 생략 되어도
+    commit(); 시 위의 변경 사항이 반영되는데, 이런 현상을 말함
+    * 영속성 컨텍스트가 관리하는 영속 상태의 엔티티에만 적용. 비영속 준영속처럼 영속성 컨텍스트의 관리를 받지 못하는 엔티티는 값을 변경해도 DB에 반영되지 않음
+
+    JPA는 엔티티를 영속성 컨텍스트에 보관할 때, 최초 상태를 복사해서 저장해둠: 스냅샷
+    플러시 시점에 스냅샷과 엔티티를ㄹ 비교해서 변경된 엔티티를 찾음.
+
+    변경 시 JPA, 변경된 필드만 업데이트하지 않는다. (default)
+    * @org.hibernate.annotations.DynamicUpdate
+        : 필요한 데이터만 사용해서 동적으로 UPDATE SQL 을 생성하는 전략하는 하이버네이트 확장기능
+        : 컬럼이 대략 30개 이상이 되면 @Dynamic update를 사용한 동적 수정 쿼리가 빠름.
+        : 기본전략을 사용하고, 최적화가 필요한 시점에 전략을 변경하는것을 추천
+        : 참고로 데이블에 컬럼이 30개 이상 된다면 테이블 설계상 책임이 적절히 분리되지 않았을 가능성이 높음.
+
+- 엔티티가 준영속 상태(detached)가 되면 지연로딩(lazy loading)이 불가능하다. -> 8장에서 설명.
+- lazy loading은 실제 객체 대신 프록시 객체를 로딩해두고 해당 객체를 실제 사용할 때 영속성 컨텍스트를 통해 데이터를 불러오는 방법인데,
+  준영속(detached) 상태는 영속성 컨텍스트가 더는 관리하지 않기 때문
+
+  준영속 상태의 엔티티를 다시 영속 상태로 변경하려면 병합(merge)을 사용하면 됨
+
+
+  ```java
+  static void mergeMember(Member member){
+    EntityManager em2 = emf.createEntityManager();
+    EntityTransaction tx2 = em.getTransaction();
+
+    tx2.begin();
+    Member mergeMember = em2.merge(member);
+    tx2.commit();
+
+
+
+  }
